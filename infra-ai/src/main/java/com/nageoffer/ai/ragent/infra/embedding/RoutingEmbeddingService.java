@@ -32,10 +32,22 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * 路由式向量嵌入服务实现类
+ * Embedding 服务路由实现，{@code @Primary} 默认注入。
  * <p>
- * 该服务通过模型路由器选择合适的嵌入模型，并在执行失败时自动进行降级处理
- * 支持单文本和批量文本的向量化操作
+ * <b>核心机制：优先级候选 + 健康检查 + 故障转移</b>
+ * <ol>
+ *   <li>ModelSelector 从配置读取候选列表（按 priority 排序）</li>
+ *   <li>ModelRoutingExecutor 遍历候选：检查熔断器 → 调用 EmbeddingClient → 成功返回 / 失败下一候选</li>
+ *   <li>全部失败则抛 RemoteException</li>
+ * </ol>
+ * <p>
+ * 两种路由模式：
+ * <ul>
+ *   <li><b>自动选型</b>（无 modelId 参数）：走全量候选列表，自动 fallback</li>
+ *   <li><b>指定模型</b>（带 modelId 参数）：精确匹配单个候选，找不到直接抛异常</li>
+ * </ul>
+ * <p>
+ * clientsByProvider 在构造时建立 providerName → EmbeddingClient 的索引，O(1) 查找。
  */
 @Service
 @Primary

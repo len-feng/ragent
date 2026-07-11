@@ -27,7 +27,18 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 /**
- * 流式首包探测桥接器
+ * 流式首包探测桥接器，实现 {@link StreamCallback}，作为下游真实 callback 的代理。
+ * <p>
+ * <b>两阶段模式：</b>
+ * <ol>
+ *   <li><b>探测阶段</b>：在首包到达前，所有回调数据存入 buffer（不发给下游），
+ *       CompletableFuture 供 {@code awaitFirstPacket} 阻塞等待</li>
+ *   <li><b>透传阶段</b>：首包成功后 {@code commit()} 将 buffer 全部回放到下游，
+ *       之后所有回调直接透传</li>
+ * </ol>
+ * <p>
+ * 这样 RoutingLLMService 可以在不污染下游 callback 的前提下探测模型是否可用，
+ * 探测失败则切换候选，不影响用户看到的内容。
  */
 public final class ProbeStreamBridge implements StreamCallback {
 

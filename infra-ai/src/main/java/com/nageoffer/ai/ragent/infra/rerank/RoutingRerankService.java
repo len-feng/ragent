@@ -30,10 +30,16 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * 路由式重排服务实现类
+ * Rerank 路由服务，和 Chat/Embedding 相同的路由模式。
  * <p>
- * 该服务通过模型路由机制动态选择合适的重排客户端，并支持失败降级策略
- * 作为主要的重排服务实现，用于对检索到的文档块进行相关性重新排序
+ * <b>Rerank 与 ANN 的本质区别：</b>
+ * <ul>
+ *   <li>ANN：向量空间余弦距离，bi-encoder，速度快但只比较向量对齐，属于"粗筛"</li>
+ *   <li>Rerank：cross-encoder 全文语义匹配，精度高但每个 (query, chunk) 对都要算，属于"精排"</li>
+ * </ul>
+ * <p>
+ * 路由策略：通过 {@link ModelRoutingExecutor} 遍历候选 Rerank 模型，
+ * 失败自动 fallback 到下一个备选。和 Chat/Embedding 共用同一套健康检查 + 熔断机制。
  */
 @Service
 @Primary

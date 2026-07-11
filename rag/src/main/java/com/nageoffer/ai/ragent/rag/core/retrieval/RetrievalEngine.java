@@ -233,7 +233,10 @@ public class RetrievalEngine {
     }
 
     /**
-     * 执行 MCP 工具调用，返回按 toolId 分组的结果
+     * 执行 MCP 工具调用，返回按 toolId 分组的结果。
+     * <p>
+     * 多个 MCP 意图并行执行（通过 {@code mcpBatchExecutor} 线程池），
+     * 单个工具失败不影响其他工具的调用。
      */
     private Map<String, List<CallToolResult>> executeMcpTools(String question,
                                                               List<NodeScore> mcpIntentScores) {
@@ -246,6 +249,7 @@ public class RetrievalEngine {
                         () -> {
                             String toolId = ns.getNode().getMcpToolId();
                             try {
+                                //打分
                                 CallToolResult result = executeSingleMcpTool(question, ns.getNode());
                                 return result == null ? null : new ToolOutput(toolId, result);
                             } catch (Exception e) {
@@ -269,6 +273,13 @@ public class RetrievalEngine {
                 ));
     }
 
+    /**
+     * 执行单个 MCP 工具调用。
+     * <p>
+     * 三步：查注册表 → LLM 提取参数 → 远程执行。
+     * 意图节点上的 {@code paramPromptTemplate} 允许为特定工具定制参数提取的提示词，
+     * 如果工具的参数语义与默认提示词不匹配，可在意图树管理中单独配置。
+     */
     private CallToolResult executeSingleMcpTool(String question, IntentNode intentNode) {
         String toolId = intentNode.getMcpToolId();
         Optional<McpToolExecutor> executorOpt = mcpToolRegistry.getExecutor(toolId);
@@ -280,6 +291,7 @@ public class RetrievalEngine {
         McpToolExecutor executor = executorOpt.get();
         Tool tool = executor.getToolDefinition();
 
+        // 意图节点可配置自定义参数提取提示词，为空则用默认的 mcp-parameter-extract.st
         String customParamPrompt = intentNode.getParamPromptTemplate();
         McpExtractionResult extraction = mcpParameterExtractor.extractParameters(question, tool, customParamPrompt);
 

@@ -243,6 +243,18 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
         runChunkTask(documentDO);
     }
 
+    /**
+     * 文档分块主流程，4 阶段：Extract → Chunk → Embed → Persist。
+     * <p>
+     * 有两种处理模式：
+     * <ul>
+     *   <li><b>Standard</b>：Tika 提取文本 → ChunkingStrategy 切分 → ChunkEmbeddingService 批量向量化 → 原子化写库</li>
+     *   <li><b>Pipeline</b>：由 IngestionEngine 插件化流水线处理（内部完成切分+向量化）</li>
+     * </ul>
+     * <p>
+     * 原子化写入（persistChunksAndVectorsAtomically）先删后插，在 Spring 事务中同时写入
+     * t_knowledge_chunk 元数据 和向量库的 embedding 数据，保证一致性。
+     */
     private void runChunkTask(KnowledgeDocumentDO documentDO) {
         String docId = documentDO.getId();
         ProcessMode processMode = ProcessMode.normalize(documentDO.getProcessMode());

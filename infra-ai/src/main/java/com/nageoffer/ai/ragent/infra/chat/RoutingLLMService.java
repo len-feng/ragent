@@ -40,7 +40,20 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * 路由式 LLM 服务实现类
+ * 流式 LLM 路由实现，核心机制：候选遍历 + ProbeStreamBridge 首包探测 + 故障转移。
+ * <p>
+ * <b>非流式（chat）：</b>委托给 {@link ModelRoutingExecutor}，失败自动 fallback。
+ * <p>
+ * <b>流式（streamChat）：</b>自己循环遍历候选列表（因为需要控制首包探测超时和 cancel）：
+ * <ol>
+ *   <li>Client 发起流式请求 → 拿到 {@link StreamCancellationHandle}</li>
+ *   <li>通过 {@link ProbeStreamBridge} 阻塞等待首包（最多60秒）</li>
+ *   <li>首包成功 → markSuccess → 返回 handle，后续流式数据直接透传给下游 callback</li>
+ *   <li>首包超时/错误/无内容 → markFailure → cancel → 下一候选</li>
+ *   <li>全部失败 → callback.onError()</li>
+ * </ol>
+ * <p>
+ * ProbeStreamBridge 在首包到达前会缓冲所有回调数据，探测成功后一次性回放，避免下游看到"半截"输出。
  */
 @Slf4j
 @Service

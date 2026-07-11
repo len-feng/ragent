@@ -19,11 +19,26 @@ package com.nageoffer.ai.ragent.rag.core.memory;
 
 import com.nageoffer.ai.ragent.framework.convention.ChatMessage;
 
+/**
+ * 会话记忆摘要服务接口。
+ * <p>
+ * 核心机制：对话超过一定轮数后，通过 LLM 将历史消息压缩为一段短文本摘要，
+ * 加载时摘要作为 SYSTEM 消息插入历史列表头部，用几百字替代数百轮原始消息。
+ */
 public interface ConversationMemorySummaryService {
 
+    /**
+     * 异步检查是否需要压缩，仅在 assistant 消息写入时触发。
+     */
     void compressIfNeeded(String conversationId, String userId, ChatMessage message);
 
+    /**
+     * 加载该会话的最新摘要记录，返回 SYSTEM 角色的 ChatMessage。
+     */
     ChatMessage loadLatestSummary(String conversationId, String userId);
 
+    /**
+     * 将摘要内容包装为 {@code <conversation-summary>} 标签，便于 LLM 区分摘要与原始消息。
+     */
     ChatMessage decorateIfNeeded(ChatMessage summary);
 }

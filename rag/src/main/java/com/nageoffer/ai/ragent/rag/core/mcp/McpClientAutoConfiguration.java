@@ -36,7 +36,19 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * MCP 客户端自动配置
+ * MCP 客户端启动配置，阶段1：工具发现与注册。
+ * <p>
+ * 启动流程：
+ * <ol>
+ *   <li>读取 {@code rag.mcp.servers} 配置列表</li>
+ *   <li>为每个 Server 创建 {@link McpSyncClient}（HTTP Streamable Transport 长连接）</li>
+ *   <li>{@code client.initialize()} 握手 + 能力协商</li>
+ *   <li>{@code client.listTools()} 发现远程工具列表</li>
+ *   <li>每个 Tool 包装为 {@link McpClientToolExecutor}，注册到 {@link McpToolRegistry}</li>
+ * </ol>
+ * <p>
+ * 工具 ID（tool name）全局唯一，同名后注册覆盖先注册。
+ * URL 自动补全 /mcp 后缀，兼容配置中写或不写的情况。
  */
 @Slf4j
 @Configuration
@@ -62,12 +74,19 @@ public class McpClientAutoConfiguration {
         }
     }
 
+    /**
+     * 连接单个 MCP Server，通过 tools/list 发现工具并注册。
+     * <p>
+     * 工具 ID（tool name）在全局范围内必须唯一——如果多个 MCP Server 暴露了同名的工具，
+     * 后注册的会覆盖先注册的。
+     */
     private void registerRemoteTools(McpClientProperties.ServerConfig server) {
         String serverName = server.getName();
         String serverUrl = server.getUrl();
         log.info("连接 MCP Server: name={}, url={}", serverName, serverUrl);
 
         try {
+            // 自动补全 /mcp 路径，兼容配置中写了或不写 /mcp 的情况
             String mcpUrl = serverUrl.endsWith("/mcp") ? serverUrl : serverUrl + "/mcp";
             HttpClientStreamableHttpTransport transport =
                     HttpClientStreamableHttpTransport.builder(mcpUrl).build();
@@ -75,9 +94,11 @@ public class McpClientAutoConfiguration {
             McpSyncClient client = McpClient.sync(transport)
                     .clientInfo(new Implementation("ragent-bootstrap", "1.0.0"))
                     .build();
+            // 握手 + 能力协商
             client.initialize();
             clients.add(client);
 
+            // 发现远程工具
             ListToolsResult result = client.listTools();
             List<Tool> tools = result.tools();
             if (CollUtil.isEmpty(tools)) {

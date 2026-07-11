@@ -119,6 +119,13 @@ public class JdbcConversationMemoryStore implements ConversationMemoryStore {
         );
     }
 
+    /**
+     * 裁剪历史列表，确保以 USER 消息开头。
+     * <p>
+     * JDBC 倒序查出的消息可能以 ASSISTANT 开头（上一次对话的尾巴），
+     * 去掉这些残余以保证 LLM 看到的是 USER → ASSISTANT 成对的历史。
+     * 如果全部是 ASSISTANT 则返回空。
+     */
     private List<ChatMessage> normalizeHistory(List<ChatMessage> messages) {
         if (messages == null || messages.isEmpty()) {
             return List.of();

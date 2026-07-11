@@ -31,6 +31,7 @@ import com.nageoffer.ai.ragent.infra.http.ModelClientErrorType;
 import com.nageoffer.ai.ragent.infra.http.ModelClientException;
 import com.nageoffer.ai.ragent.infra.http.ModelUrlResolver;
 import com.nageoffer.ai.ragent.infra.model.ModelTarget;
+import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.OkHttpClient;
@@ -46,9 +47,28 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+/**
+ * 百炼 Rerank 客户端，调用阿里云 DashScope/百炼平台的 Rerank API。
+ * <p>
+ * <b>API 格式（OpenAI 兼容）：</b>
+ * <pre>
+ *   POST /compatible-mode/v1/rerank
+ *   { "model": "gte-rerank", "input": {"query": "...", "documents": [...]}, "parameters": {"top_n": N} }
+ * </pre>
+ * <p>
+ * <b>处理逻辑：</b>
+ * <ol>
+ *   <li>先按 id 去重（二次保障，即便上游 DedupPostProcessor 已去重过）</li>
+ *   <li>候选数 ≤ topN 时直接返回，不调 API（不需要精排）</li>
+ *   <li>调用 Rerank API，解析 results 中的 index + relevance_score</li>
+ *   <li>用 relevance_score 替换 ANN 阶段的向量相似度分数</li>
+ *   <li>不足 topN 的从剩余候选补位，保证结果数量</li>
+ * </ol>
+ */
+
+@RequiredArgsConstructor
 @Service
 @Slf4j
-@RequiredArgsConstructor
 public class BaiLianRerankClient implements RerankClient {
 
     @Qualifier("syncHttpClient")

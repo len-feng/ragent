@@ -41,6 +41,24 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * 消息反馈（点赞/点踩）服务实现。
+ * <p>
+ * <b>两条写入路径：</b>
+ * <ul>
+ *   <li><b>异步</b>：Controller → submitFeedbackAsync → RocketMQ → Consumer → submitFeedbackByEvent → DB。
+ *       用户侧 API 走此路径，削峰解耦。</li>
+ *   <li><b>同步</b>：submitFeedback → 直接写库。内部管理后台等不需要 MQ 的场景使用。</li>
+ * </ul>
+ * <p>
+ * <b>Upsert 逻辑：</b>
+ * 无记录则 INSERT，有记录则 UPDATE ... WHERE updateTime < submitTime。
+ * submitTime 是用户点击那一刻的客户端时间戳，这个条件保证了：
+ * 即使 MQ 乱序消费（先发的消息后到），旧事件也无法覆盖新事件的写入结果。
+ * <p>
+ * <b>校验：</b>
+ * vote 只能是 1（赞）或 -1（踩），且只能对 assistant 消息反馈。
+ */
 @Service
 @RequiredArgsConstructor
 public class MessageFeedbackServiceImpl implements MessageFeedbackService {
@@ -138,6 +156,7 @@ public class MessageFeedbackServiceImpl implements MessageFeedbackService {
         return message;
     }
 
+    // Upsert：无则插入，有则仅当 submitTime 晚于上次更新时间才覆盖（防 MQ 乱序写入旧数据）
     private void doUpsertFeedback(String messageId, String userId, String conversationId,
                                   Integer vote, String reason, String comment, long submitTime) {
         MessageFeedbackDO existing = feedbackMapper.selectOne(

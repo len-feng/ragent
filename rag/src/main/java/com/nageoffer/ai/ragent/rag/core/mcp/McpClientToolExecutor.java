@@ -29,8 +29,15 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * MCP 工具执行器：通过官方 SDK 的 McpSyncClient 调用远端 MCP Server 暴露的工具
- * 负责工具发现（tools/list）、参数封装、调用结果与异常的标准化处理
+ * MCP 工具执行器，阶段3：远程调用。
+ * <p>
+ * 持有 {@link McpSyncClient} 和 {@link Tool} 定义，封装单次 RPC 调用：
+ * <ol>
+ *   <li>参数已由上层 LLMMcpParameterExtractor 提取好，此处直接使用</li>
+ *   <li>调用 {@code mcpClient.callTool(new CallToolRequest(toolName, args))}</li>
+ *   <li>成功返回 {@link CallToolResult}</li>
+ *   <li>异常不抛，返回 isError=true 的 CallToolResult（含错误文本），上层统一处理</li>
+ * </ol>
  */
 @Slf4j
 @RequiredArgsConstructor

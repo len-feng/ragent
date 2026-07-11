@@ -39,6 +39,24 @@ import com.nageoffer.ai.ragent.rag.service.ConversationGroupService;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * RAG 流式对话的事件处理器，实现 {@link StreamCallback}，作为 SSE 与 LLM 流式输出的桥梁。
+ * <p>
+ * <b>核心职责：</b>
+ * <ol>
+ *   <li>接收 LLM 的增量回调（onContent/onThinking），按 code point 分块后通过 SSE 推送给前端</li>
+ *   <li>累积完整回答内容（answer/thinking StringBuilder），在 onComplete 时持久化到 DB</li>
+ *   <li>管理任务生命周期：构造时 register，完成/取消时 unregister</li>
+ *   <li>用户取消时（StreamTaskManager.cancel），即使回答未完成也落库已有内容</li>
+ * </ol>
+ * <p>
+ * <b>SSE 事件序列：</b>
+ * <pre>
+ *   meta(立即) → message×N(流式内容) → finish(消息ID+标题) → done([DONE])
+ * </pre>
+ * <p>
+ * <b>分块策略：</b>按 messageChunkSize 个 Unicode code point 为一组切分，正确处理 emoji 等代理对字符。
+ */
 @Slf4j
 public class StreamChatEventHandler implements StreamCallback {
 

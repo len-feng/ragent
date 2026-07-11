@@ -50,11 +50,27 @@ import java.util.stream.Collectors;
 
 import static com.nageoffer.ai.ragent.rag.constant.RAGConstant.CONTEXT_FORMAT_PATH;
 
+/**
+ * JDBC 实现的对话摘要服务。
+ * <p>
+ * 每次 assistant 消息写入后异步检查是否需要生成/更新摘要。
+ * 使用 Redis 分布式锁保证同一会话的摘要任务串行执行（多实例部署场景）。
+ * <p>
+ * 摘要算法是<b>增量滚动压缩</b>：
+ * <ol>
+ *   <li>取最近 {@code historyKeepTurns} 轮 USER 消息，最早那条的 ID 作为 cutoff</li>
+ *   <li>取上一次摘要的 lastMessageId 作为 after，查询 (after, cutoff] 区间的新消息</li>
+ *   <li>将新消息与已有摘要一起发给 LLM，输出合并后的更新摘要</li>
+ *   <li>新摘要的 lastMessageId = 本次压缩覆盖到的最后一条消息 ID</li>
+ * </ol>
+ * 这样每次只压缩"新增的"消息而非全量，避免重复消耗 token。
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class JdbcConversationMemorySummaryService implements ConversationMemorySummaryService {
 
+    /** 分布式锁 key 前缀，按 userId:conversationId 粒度加锁 */
     private static final String SUMMARY_LOCK_PREFIX = "ragent:memory:summary:lock:";
 
     private final ConversationGroupService conversationGroupService;
@@ -66,6 +82,11 @@ public class JdbcConversationMemorySummaryService implements ConversationMemoryS
     private final RedissonClient redissonClient;
     private final Executor memorySummaryExecutor;
 
+    // 对话记忆摘要
+    /**
+     * 仅在 assistant 消息写入时异步触发摘要检查。
+     * 因为完整的一轮对话（USER→ASSISTANT）在 assistant 写入时才算完成。
+     */
     @Override
     public void compressIfNeeded(String conversationId, String userId, ChatMessage message) {
         if (!memoryProperties.getSummaryEnabled()) {
@@ -248,6 +269,12 @@ public class JdbcConversationMemorySummaryService implements ConversationMemoryS
         return new ChatMessage(ChatMessage.Role.SYSTEM, record.getContent());
     }
 
+    /**
+     * 确定本次摘要的起始消息 ID。
+     * <p>
+     * 有 lastMessageId → 直接用它（上次摘要覆盖到哪，这次从下一条开始）。
+     * 老数据没有 lastMessageId → 按时间查该摘要更新时最大消息 ID（兼容历史数据）。
+     */
     private String resolveSummaryStartId(String conversationId, String userId, ConversationSummaryDO summary) {
         if (summary == null) {
             return null;

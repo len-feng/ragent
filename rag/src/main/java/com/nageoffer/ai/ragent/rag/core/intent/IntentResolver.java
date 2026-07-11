@@ -39,6 +39,18 @@ import static com.nageoffer.ai.ragent.rag.constant.RAGConstant.INTENT_MIN_SCORE;
 import static com.nageoffer.ai.ragent.rag.constant.RAGConstant.MAX_INTENT_COUNT;
 import static com.nageoffer.ai.ragent.rag.enums.IntentKind.SYSTEM;
 
+/**
+ * 意图解析器。
+ * <p>
+ * 对上一步拆分的每个子问题并行调 LLM 做意图分类，最后对总意图数做 cap 裁剪防止检索膨胀。
+ * <p>
+ * 涉及的概念：
+ * <ul>
+ *   <li><b>子问题 (sub-question)</b> — 上一阶段 rewrite 拆出的独立问题</li>
+ *   <li><b>意图 (intent / NodeScore)</b> — 每个子问题可以命中多个意图节点，每个带一个匹配分数</li>
+ *   <li><b>cap 裁剪</b> — 所有子问题的意图加起来不能超过 {@code MAX_INTENT_COUNT}，超了就按分数择优保留</li>
+ * </ul>
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -48,11 +60,19 @@ public class IntentResolver {
     private final IntentClassifier intentClassifier;
     private final Executor intentClassifyExecutor;
 
+    /**
+     * 对改写后的子问题做意图识别。
+     * <p>
+     * 每个子问题通过 {@link IntentClassifier#classifyTargets} 获取候选意图列表（已按分数降序），
+     * 再经过 {@code INTENT_MIN_SCORE} 过滤和 {@code MAX_INTENT_COUNT} cap 后返回。
+     * 多个子问题之间并行执行分类。
+     */
     @RagTraceNode(name = "intent-resolve", type = "INTENT")
     public List<SubQuestionIntent> resolve(RewriteResult rewriteResult) {
         List<String> subQuestions = CollUtil.isNotEmpty(rewriteResult.subQuestions())
                 ? rewriteResult.subQuestions()
                 : List.of(rewriteResult.rewrittenQuestion());
+        // 每个子问题独立调 LLM 做意图分类，并行执行以降低总延迟
         List<CompletableFuture<SubQuestionIntent>> tasks = subQuestions.stream()
                 .map(q -> CompletableFuture.supplyAsync(
                         () -> {
@@ -60,6 +80,7 @@ public class IntentResolver {
                                 return new SubQuestionIntent(q, classifyIntents(q));
                             } catch (Exception e) {
                                 log.error("子问题意图分类失败，降级为空意图，question：{}", q, e);
+                                // 单个子问题分类失败不阻断其他子问题，降级为空意图列表
                                 return new SubQuestionIntent(q, List.of());
                             }
                         },
@@ -72,6 +93,10 @@ public class IntentResolver {
         return capTotalIntents(subIntents);
     }
 
+    /**
+     * 将多个子问题的意图合并后按 MCP / KB 分组。
+     * 后续 pipeline 根据分组决定走 MCP 工具调用、KB 知识库检索、还是混合。
+     */
     public IntentGroup mergeIntentGroup(List<SubQuestionIntent> subIntents) {
         List<NodeScore> mcpIntents = new ArrayList<>();
         List<NodeScore> kbIntents = new ArrayList<>();
@@ -82,12 +107,22 @@ public class IntentResolver {
         return new IntentGroup(mcpIntents, kbIntents);
     }
 
+    /**
+     * 判断是否所有意图都是纯聊天（SYSTEM 类型），即不涉及 RAG 检索和 MCP 工具调用。
+     */
     public boolean isSystemOnly(List<NodeScore> nodeScores) {
         return nodeScores.size() == 1
                 && nodeScores.get(0).getNode() != null
                 && nodeScores.get(0).getNode().getKind() == SYSTEM;
     }
 
+    /**
+     * 对单个子问题做意图分类，过滤低分并按上限截断。
+     * <p>
+     * {@code classifyTargets} 返回已按分数降序排列的全量候选，
+     * 此处再做两道过滤：低于 {@code INTENT_MIN_SCORE} 的视为误匹配直接丢弃，然后取前 {@code MAX_INTENT_COUNT} 个。
+     * 注意：这里是单子问题的截断，总意图数还可能在 {@link #capTotalIntents} 中二次裁剪。
+     */
     private List<NodeScore> classifyIntents(String question) {
         List<NodeScore> scores = intentClassifier.classifyTargets(question);
         return scores.stream()

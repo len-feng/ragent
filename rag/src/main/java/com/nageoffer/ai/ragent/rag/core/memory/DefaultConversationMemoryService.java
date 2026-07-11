@@ -29,6 +29,12 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
+/**
+ * 对话记忆服务默认实现。
+ * <p>
+ * 加载时并行获取摘要和最近 N 条历史消息，合并为统一的 ChatMessage 列表。
+ * 追加消息后异步触发摘要压缩。
+ */
 @Slf4j
 @Service
 public class DefaultConversationMemoryService implements ConversationMemoryService {
