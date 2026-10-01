@@ -4115,12 +4115,15 @@ textarea {
   border-color: var(--agent-orange-ink);
 }
 
-/* 行尾「…」：hover / 菜单展开 / 激活行 三种情形才现身 */
+/* 行尾「…」：hover / 菜单展开 / 激活行 三种情形才现身
+   浮在行上而不占位：占位会让标题一直提前 44px 截断 静置时行尾留一截空白 省略号也够不着行的右缘 */
 .agent-app .agent-item-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
   width: 26px;
   height: 26px;
-  flex: none;
-  margin-right: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4135,9 +4138,22 @@ textarea {
 
 .agent-app .agent-session-item:hover .agent-item-btn,
 .agent-app .agent-session-item[data-active="true"] .agent-item-btn,
-.agent-app .agent-item-btn[data-state="open"] {
+.agent-app .agent-session-item[data-menu="true"] .agent-item-btn {
   opacity: 1;
   pointer-events: auto;
+}
+
+/* 钮一现身就压在标题尾巴上 这里把尾巴揉成一段渐隐：否则文本省略号「…」与钮上的三点挨着成两排点
+   用遮罩而不是留白 文字排布不变 悬停时标题不会重新截断跳一下 */
+.agent-app .agent-session-item:hover .agent-session-title--fade,
+.agent-app .agent-session-item[data-active="true"] .agent-session-title--fade,
+.agent-app .agent-session-item[data-menu="true"] .agent-session-title--fade {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    #000 calc(100% - 48px),
+    transparent calc(100% - 24px)
+  );
+  mask-image: linear-gradient(to right, #000 calc(100% - 48px), transparent calc(100% - 24px));
 }
 
 .agent-app .agent-item-btn:hover {
@@ -5110,6 +5126,15 @@ textarea {
 
 .agent-app .agent-composer-btn[data-stop="true"] {
   background: var(--agent-ink);
+}
+
+/* 停止请求已受理：原位退成安静的进度态，不让禁用态看起来像还能再点 */
+.agent-app .agent-composer-btn[data-stopping="true"] {
+  background: var(--agent-surface);
+  border-color: var(--agent-grid-strong);
+  color: var(--agent-muted);
+  cursor: progress;
+  filter: none;
 }
 
 /* 框外一行免责：框里不摆第二行是因为没有真控件 这一行有真职责 两条不矛盾

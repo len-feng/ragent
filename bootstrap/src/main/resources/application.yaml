@@ -41,12 +41,17 @@ ragent:
 
 # Agent 执行架构（ragent.engine.type=agent 时生效）；单模型无 fallback，供应商可用性由 provider 侧保障
 agent:
+  mcp:
+    servers:
+      - name: default
+        url: http://localhost:9099
   chat:
     provider: deepseek   # 引用 ai.providers 下的供应商，取其 url / api-key / endpoints.chat
     model: deepseek-flash    # 直接传给 OpenAI 兼容端点的模型名
-  max-iters: 10         # ReAct 循环上限，超出后熔断收尾
-  max-retries: 1        # 最大尝试次数含首次，1 即不重试
+  max-iters: 10
+  max-retries: 1
   sse-timeout-ms: 900000
+  max-concurrent-runs-per-user: 5
   memory:
     context-window-chars: 100000
     summary-enabled: true
@@ -143,11 +148,6 @@ rag:
       lock-seconds: 900
       batch-size: 20
       min-interval-seconds: 60
-
-  mcp:
-    servers:
-      - name: default
-        url: http://localhost:9099
 
   search:
     # 检索漏斗三段预算，各自独立、单调收窄，启动时校验 recall-budget ≥ default-top-k 且 rerank-candidate-limit ≥ default-top-k

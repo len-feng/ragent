@@ -199,7 +199,7 @@ public class StreamChatEventHandler implements StreamCallback {
         if (taskManager.isCancelled(taskId)) {
             return;
         }
-        if (StrUtil.isBlank(chunk)) {
+        if (chunk == null || chunk.isEmpty()) {
             return;
         }
         if (thinkingStartMs > 0 && thinkingDurationSeconds == 0) {
@@ -214,7 +214,7 @@ public class StreamChatEventHandler implements StreamCallback {
         if (taskManager.isCancelled(taskId)) {
             return;
         }
-        if (StrUtil.isBlank(chunk)) {
+        if (chunk == null || chunk.isEmpty()) {
             return;
         }
         if (thinkingStartMs == 0) {

@@ -176,6 +176,9 @@ public class BaiLianRerankClient implements RerankClient {
             }
 
             RetrievedChunk src = candidates.get(idx);
+            if (!addedIds.add(src.getId())) {
+                continue;
+            }
 
             Float score = null;
             if (item.has("relevance_score") && !item.get("relevance_score").isJsonNull()) {
@@ -191,7 +194,6 @@ public class BaiLianRerankClient implements RerankClient {
                     .build()
                     : unscored(src);
             reranked.add(hit);
-            addedIds.add(src.getId());
 
             if (reranked.size() >= topN) {
                 break;
