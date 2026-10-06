@@ -91,19 +91,6 @@ public class ReActAgentProvider {
         }
     }
 
-    /**
-     * 驱逐单个会话的内存状态：只作用于已构建的实例，清理动作不该顺手把 Agent 建起来
-     * 仅本节点有效，多节点各持一份缓存，需要时经 Redis 广播补齐
-     */
-    @SuppressWarnings("resource")
-    public void evictStateCache(String userId, String sessionId) {
-        CachedAgent current = cached;
-        if (current == null) {
-            return;
-        }
-        current.activeAgent().agent().clearStateCache(userId, sessionId);
-    }
-
     private boolean matches(CachedAgent current, String persona, ResolvedCatalog catalog) {
         return current != null
                 && current.persona().equals(persona)
@@ -118,6 +105,8 @@ public class ReActAgentProvider {
                 .toolkit(toolCatalog.buildToolkit(catalog))
                 .maxIters(agentProperties.getMaxIters())
                 .maxRetries(agentProperties.getMaxRetries())
+                // 强制停止可能留下无结果的工具调用，下一问先补错误结果再继续
+                .enablePendingToolRecovery(true)
                 .stateStore(agentStateStore);
         // 追踪包在最外层：span 要盖住记忆与压缩才量得到耗时
         otelTracingMiddleware.ifAvailable(builder::middleware);
